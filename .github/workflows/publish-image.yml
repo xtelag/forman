@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (for example v0.4.0)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,21 +18,23 @@ permissions:
 jobs:
   publish:
     if: github.repository == 'xtelag/forman'
-    runs-on: [self-hosted, Linux, debian]
+    runs-on: ubuntu-24.04
     env:
       IMAGE: ghcr.io/xtelag/forman
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          ref: refs/tags/${{ env.RELEASE_TAG }}
 
       - name: Check release version
         id: release
         run: |
           version=$(docker run --rm -i node:24-trixie-slim \
             node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).version' < package.json)
-          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
-            printf 'Git tag %s must match the package.json version v%s.\n' "$GITHUB_REF_NAME" "$version" >&2
+          if [[ "$RELEASE_TAG" != "v$version" ]]; then
+            printf 'Git tag %s must match the package.json version v%s.\n' "$RELEASE_TAG" "$version" >&2
             exit 1
           fi
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
@@ -47,5 +55,5 @@ jobs:
           docker buildx build --platform linux/amd64,linux/arm64 --pull \
             --output type=registry,oci-mediatypes=true \
             --label "org.opencontainers.image.version=$VERSION" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
             --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" .
