@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const DEFAULT_DATABASE_PATH = "/data/forman.sqlite";
+
 const secretSchema = z.string().min(32);
 
 const environmentSchema = z.object({
@@ -14,7 +16,7 @@ const environmentSchema = z.object({
           (value.hostname === "localhost" || value.hostname.endsWith(".localhost"))),
       "FORMAN_BASE_ORIGIN must use HTTPS, except HTTP on localhost or its subdomains",
     ),
-  FORMAN_DATABASE_PATH: z.string().min(1),
+  FORMAN_DATABASE_PATH: z.string().min(1).default(DEFAULT_DATABASE_PATH),
   FORMAN_TRUST_PROXY: z
     .enum(["true", "false"])
     .default("false")

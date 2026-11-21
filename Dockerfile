@@ -44,7 +44,7 @@ RUN corepack pnpm install --prod --frozen-lockfile \
 FROM ${RUNTIME_IMAGE} AS runner
 
 LABEL org.opencontainers.image.title="Forman" \
-    org.opencontainers.image.description="The Swiss Army knife for forms and surveys." \
+    org.opencontainers.image.description="The Swiss Army knife for web forms and surveys." \
     org.opencontainers.image.vendor="Telag" \
     org.opencontainers.image.licenses="MIT" \
     org.opencontainers.image.source="https://github.com/xtelag/forman"

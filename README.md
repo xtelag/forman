@@ -1,15 +1,33 @@
 # Forman
 
-The Swiss Army knife for forms and surveys.
+The Swiss Army knife for web forms and surveys.
 
 Forman is a self-hosted application for collecting responses and processing them through Pipelines.
 Use a **One-shot Source** for a single submission, a **Session Source** for a form that saves progress,
 or an **M2M Source** for authenticated server-to-server JSON.
 
 - Publish Built-in Forms and multi-step surveys, integrate your own forms, or use the vanilla JavaScript pop-up
+- Protect browser forms with built-in, self-hosted ALTCHA, honeypots, and configurable rate limits
 - Process responses with Inbox, Email, Webhook, transformation and callback Actions
 - Review Submissions and Pipeline Runs, organize records with tags, and manage bulk actions
+- Set global and per-source retention policies for submissions
 - Store configuration and responses in SQLite; export and restore plain or password-encrypted backups
+
+## Quick start
+
+```sh
+docker run --rm \
+  -p 127.0.0.1:3000:3000 \
+  -e FORMAN_BASE_ORIGIN=http://localhost:3000 \
+  -e FORMAN_SESSION_SECRET="$(openssl rand -hex 32)" \
+  -e FORMAN_ALTCHA_SECRET="$(openssl rand -hex 32)" \
+  -e FORMAN_INITIAL_ADMIN_PASSWORD=forman-local-demo-password \
+  ghcr.io/xtelag/forman:latest
+```
+
+Open [http://localhost:3000](http://localhost:3000) and sign in as `forman` with
+the password `forman-local-demo-password`. Stopping the container deletes the
+test data.
 
 ## Screenshots
 

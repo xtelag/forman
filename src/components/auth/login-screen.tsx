@@ -41,7 +41,7 @@ export function LoginScreen({
             <Box style={{ filter: "brightness(0) invert(1)" }}>
               <FormanBrand />
             </Box>
-            <Text size="xl">The Swiss Army knife for forms and surveys.</Text>
+            <Text size="xl">The Swiss Army knife for web forms and surveys.</Text>
           </Stack>
         </Center>
         <Center

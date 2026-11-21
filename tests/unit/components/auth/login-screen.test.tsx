@@ -25,7 +25,7 @@ describe("LoginScreen", () => {
       "current-password",
     );
     expect(
-      screen.getByText("The Swiss Army knife for forms and surveys."),
+      screen.getByText("The Swiss Army knife for web forms and surveys."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Enter administrator credentials to continue."),

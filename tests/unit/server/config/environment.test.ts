@@ -26,6 +26,15 @@ describe("loadEnvironment", () => {
     });
   });
 
+  test("defaults to the standard SQLite file and accepts an explicit path", () => {
+    expect(loadEnvironment({ ...validEnvironment, FORMAN_DATABASE_PATH: undefined }).databasePath)
+      .toBe("/data/forman.sqlite");
+    expect(loadEnvironment({ ...validEnvironment, FORMAN_DATABASE_PATH: "/custom/forman.sqlite" }).databasePath)
+      .toBe("/custom/forman.sqlite");
+    expect(() => loadEnvironment({ ...validEnvironment, FORMAN_DATABASE_PATH: "" }))
+      .toThrow(/FORMAN_DATABASE_PATH/);
+  });
+
   test("does not trust forwarding headers unless explicitly configured", () => {
     const direct: Record<string, string | undefined> = { ...validEnvironment };
     direct.FORMAN_TRUST_PROXY = undefined;

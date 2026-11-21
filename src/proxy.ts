@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isMaintenanceMode } from "@/server/backup/maintenance-mode";
+import { DEFAULT_DATABASE_PATH } from "@/server/config/environment";
 import { requestOrigin } from "@/server/http/request-origin";
 
 const RESTORE_PATH = "/api/admin/v1/backup/restore";
@@ -97,7 +98,7 @@ export function proxy(request: NextRequest) {
       { status: 403 },
     ));
   }
-  const databasePath = process.env.FORMAN_DATABASE_PATH;
+  const databasePath = process.env.FORMAN_DATABASE_PATH ?? DEFAULT_DATABASE_PATH;
   if (
     databasePath &&
     request.nextUrl.pathname !== RESTORE_PATH &&
