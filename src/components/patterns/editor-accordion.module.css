@@ -1,0 +1,6 @@
+.actions { display: contents; }
+@media (max-width: 62em) {
+  .customHeader { position: relative; }
+  .customHeader .chevron { align-self: flex-start; margin-top: 15px; }
+  .customHeader .actions { display: block; position: absolute; right: 0; top: 2px; }
+}

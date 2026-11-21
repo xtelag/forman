@@ -1,0 +1,98 @@
+@layer theme, base, mantine, mantine-datatable, components, utilities;
+@import "@mantine/core/styles.layer.css";
+@import "mantine-datatable/styles.layer.css";
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-text);
+  font-family: var(--mantine-font-family);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Dense controls remain comfortably operable without a precise pointer. */
+@media (pointer: coarse) {
+  [data-size^="icon"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/*
+ * Row actions stay reachable when a wide table scrolls horizontally, for
+ * example with the sidebar open on a laptop.
+ */
+@layer components {
+  .dashboard-summary-card {
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  .dashboard-summary-card:hover {
+    border-color: var(--mantine-color-default-border-hover, var(--mantine-color-gray-5));
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  .dashboard-summary-card:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+
+  [data-slot="resource-table-desktop"] [data-sticky-action] {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    background-color: var(--mantine-color-body);
+    box-shadow: inset 1px 0 0 var(--mantine-color-default-border);
+  }
+
+  [data-slot="resource-table-desktop"] tbody tr:hover > [data-sticky-action] {
+    background-color: var(--table-highlight-on-hover-color, var(--mantine-color-default-hover));
+  }
+}
+
+
+/* Shared Mantine focus treatment: keyboard indication without an outer halo. */
+.forman-focus:focus:not(:focus-visible) {
+  outline: none;
+}
+.forman-focus:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+}
+
+
+/* Keep DataTable's native overflow detection and pinned-column shadows.
+   Increase contrast so horizontal continuation is visible without a scrollbar. */
+.mantine-datatable {
+  --mantine-datatable-shadow-background-left: linear-gradient(90deg, rgb(0 0 0 / 16%), transparent);
+  --mantine-datatable-shadow-background-right: linear-gradient(270deg, rgb(0 0 0 / 16%), transparent);
+}
+
+[data-mantine-color-scheme="dark"] .mantine-datatable {
+  --mantine-datatable-shadow-background-left: linear-gradient(90deg, rgb(0 0 0 / 65%), transparent);
+  --mantine-datatable-shadow-background-right: linear-gradient(270deg, rgb(0 0 0 / 65%), transparent);
+}

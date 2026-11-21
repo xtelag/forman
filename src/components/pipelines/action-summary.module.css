@@ -1,0 +1,28 @@
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+}
+.name { min-width: 0; max-width: 40%; flex-shrink: 1; }
+.metadata {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.status { margin-left: auto; padding-left: var(--mantine-spacing-md); white-space: nowrap; }
+.accessible {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 62em) {
+  .summary { display: block; }
+  .name { display: block; max-width: none; margin-right: 96px; }
+  .metadata { flex-wrap: wrap; margin-top: 8px; gap: 4px 6px; }
+  .status { margin-left: 6px; padding-left: 0; }
+}

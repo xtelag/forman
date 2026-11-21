@@ -1,0 +1,35 @@
+import {test, expect} from "@playwright/test";
+import {ensureE2eRateLimits} from "./support/rate-limits";
+
+test("copy stays visible when integration code scrolls on both axes", async ({page}, testInfo) => {
+  await page.goto('/login');
+  await page.getByLabel('Username').fill('forman');
+  await page.getByLabel('Password', {exact:true}).fill('forman-e2e-password-2026');
+  await page.getByRole('button', {name:'Login', exact:true}).click();
+  await expect(page).toHaveURL('/app');
+  await ensureE2eRateLimits(page);
+  const headers = {origin:'http://localhost:3100'};
+  const source = await (await page.request.post('/api/admin/v1/sources', {headers, data:{name:`Scroll check ${testInfo.project.name}`,type:'one-shot'}})).json();
+  const definition = {type:'object',properties:{email:{type:'string',format:'email'}},required:['email'],additionalProperties:false};
+  expect((await page.request.patch(`/api/admin/v1/sources/${source.sourceId}`, {headers,data:{section:'source-fields',values:{fieldDefinitionMode:'json-schema',fieldDefinitionSource:JSON.stringify(definition)}}})).ok()).toBe(true);
+  await page.goto(`/app/sources/${source.sourceId}`);
+  await page.getByRole('tab', {name:'Integration',exact:true}).click();
+  await page.getByLabel('Example', {exact:true}).selectOption('Popup');
+  const block = page.locator('[data-slot="code-block"]');
+  const viewport = block.locator('[data-slot="code-block-viewport"]');
+  const copy = block.getByRole('button', {name:'Copy code',exact:true});
+  await expect(viewport.locator('.shiki')).toBeVisible();
+  await copy.scrollIntoViewIfNeeded();
+  const before = await copy.boundingBox();
+  const offset = await viewport.evaluate(el => {el.scrollTop=el.scrollHeight;el.scrollLeft=el.scrollWidth;return {x:el.scrollLeft,y:el.scrollTop};});
+  expect(offset.x).toBeGreaterThan(0);
+  expect(offset.y).toBeGreaterThan(0);
+  expect(await copy.boundingBox()).toEqual(before);
+  await expect(copy).toBeInViewport();
+  await page.context().grantPermissions(['clipboard-read','clipboard-write']);
+  await copy.click();
+  await expect(block.getByRole('status')).toHaveText('Copied HTML.');
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('<script src=');
+  expect(copied.trimEnd()).toMatch(/<\/script>$/);
+});

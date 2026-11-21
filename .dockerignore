@@ -1,0 +1,17 @@
+# Dotfiles and hidden directories are opt-in.
+**/.*
+
+# Dependencies and generated output.
+node_modules/
+coverage/
+playwright-report/
+test-results/
+**/*.tsbuildinfo
+
+# Local databases and backups.
+data/
+**/*.sqlite
+**/*.sqlite-shm
+**/*.sqlite-wal
+**/*.sqlite-journal
+**/*.forman-backup

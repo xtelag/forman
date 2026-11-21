@@ -1,0 +1,25 @@
+import {afterEach,expect,test,vi} from "vitest";
+import {createTestDatabase} from "../../../helpers/database";
+import {createSource} from "@/server/sources/source-service";
+import {createPipeline,updatePipelineAction,getPipeline} from "@/server/pipelines/pipeline-service";
+import {preparePipelineRuns,insertPreparedPipelineRuns} from "@/server/pipelines/pipeline-run-service";
+import {runPipelines} from "@/server/pipelines/pipeline-run-worker";
+import {submissions,pipelineActionRuns} from "@/server/db/schema";
+const databases:ReturnType<typeof createTestDatabase>[]=[];
+afterEach(()=>databases.splice(0).forEach(db=>db.dispose()));
+test.each(["POST","PUT","PATCH","DELETE","GET","HEAD"])("delivers %s with snapshotted Basic auth and encoded URL",async method=>{
+ const db=createTestDatabase();databases.push(db);
+ const source=await createSource(db.db,{name:"Webhook",type:"one-shot"});
+ const configuration={url:"https://example.test/{{meta.submissionId}}?name={{payload.name}}",method,authentication:"basic",username:"test",password:"original-secret"};
+ const pipeline=(await createPipeline(db.db,{sourceId:source.id,name:"Webhook",steps:[{name:"HTTP",type:"webhook",configuration}]}))!;
+ expect(JSON.stringify(pipeline)).not.toContain("original-secret");
+ const now=new Date(),payload={name:"A&B"};
+ db.db.insert(submissions).values({id:"submission-test",sourceId:source.id,payloadJson:JSON.stringify(payload),createdAt:now}).run();
+ insertPreparedPipelineRuns(db.db,"submission-test",await preparePipelineRuns(db.db,{sourceId:source.id,payload,createdAt:now}));
+ await updatePipelineAction(db.db,pipeline.id,pipeline.steps[0].id,{name:"HTTP",type:"webhook",configuration:{...configuration,password:"replacement-secret"}});
+ expect(JSON.stringify(await getPipeline(db.db,pipeline.id))).not.toContain("replacement-secret");
+ const send=vi.fn().mockResolvedValue({status:204,body:null});
+ await runPipelines({database:db.db,sendWebhook:send});
+ expect(send).toHaveBeenCalledWith(expect.objectContaining({method,url:"https://example.test/submission-test?name=A%26B",body:["GET","HEAD"].includes(method)?"":JSON.stringify(payload),headers:expect.objectContaining({authorization:`Basic ${Buffer.from("test:original-secret").toString("base64")}`})}));
+ expect(db.db.select().from(pipelineActionRuns).get()?.status).toBe("completed");
+});

@@ -1,0 +1,14 @@
+.configurationCard { container-type: inline-size; }
+.configuration {
+  display: grid;
+  grid-template-columns: minmax(0, 24rem) auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--mantine-spacing-md);
+}
+.enabled { min-height: 36px; display: flex; align-items: center; }
+.save { min-width: 0; container: pipeline-save / inline-size; }
+@container (max-width: 48em) {
+  .configuration { grid-template-columns: auto minmax(0, 1fr); }
+  .name { grid-column: 1 / -1; }
+  .enabled { align-self: end; }
+}

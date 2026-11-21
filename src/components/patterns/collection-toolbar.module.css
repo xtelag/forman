@@ -1,0 +1,30 @@
+.container {
+  container-type: inline-size;
+}
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "search filters" "tags tags";
+  gap: var(--mantine-spacing-sm);
+  align-items: center;
+}
+.search {
+  grid-area: search;
+  min-width: 0;
+}
+.tags {
+  grid-area: tags;
+  min-width: 0;
+}
+.tags:empty {
+  display: none;
+}
+.filters {
+  grid-area: filters;
+}
+@container (min-width: 720px) {
+  .toolbar {
+    grid-template-columns: minmax(200px, 320px) minmax(0, 1fr) auto;
+    grid-template-areas: "search tags filters";
+  }
+}

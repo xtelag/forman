@@ -1,0 +1,28 @@
+# Dotfiles and hidden directories are opt-in.
+.*
+!/.gitignore
+!/.dockerignore
+!/.github/
+!/.env.dev.example
+!/.env.prod.example
+
+# Node.js dependencies and generated output
+node_modules/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Local databases and backups, including the production Compose bind mount.
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.forman-backup
+
+# Editor and failed-merge leftovers
+*.orig
+*.rej
+*~
+*.swp

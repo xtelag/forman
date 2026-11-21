@@ -1,0 +1,27 @@
+/* Mantine distinguishes the committed value (checked) from keyboard navigation
+   (combobox-selected). Keep those states visually distinct. */
+.option {
+  font-weight: 400;
+  color: var(--mantine-color-text);
+}
+
+.option[data-combobox-selected] {
+  background-color: var(--mantine-color-default-hover);
+  color: var(--mantine-color-text);
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+}
+
+.option[data-checked],
+.option[data-checked]:hover,
+.menuItem:global(.mantine-datatable-page-size-selector-active) {
+  background-color: var(--mantine-color-violet-1);
+  color: var(--mantine-color-violet-9);
+}
+
+[data-mantine-color-scheme="dark"] .option[data-checked],
+[data-mantine-color-scheme="dark"] .option[data-checked]:hover,
+[data-mantine-color-scheme="dark"] .menuItem:global(.mantine-datatable-page-size-selector-active) {
+  background-color: var(--mantine-color-violet-2);
+  color: var(--mantine-color-violet-9);
+}
