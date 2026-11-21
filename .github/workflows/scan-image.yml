@@ -11,6 +11,9 @@ on:
 permissions:
   packages: read
 
+env:
+  TRIVY_IMAGE: docker.io/aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+
 jobs:
   scan:
     if: >-
@@ -24,16 +27,38 @@ jobs:
         platform: [linux/amd64, linux/arm64]
     steps:
       - name: Scan the published Forman image
+        shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLATFORM: ${{ matrix.platform }}
         run: |
           registry_config="$(mktemp -d)"
+          report="$(mktemp)"
+          trap 'docker --config "$registry_config" logout ghcr.io >/dev/null; unlink "$report"' EXIT
           printf '%s' "$GHCR_TOKEN" | docker --config "$registry_config" login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          trap 'docker --config "$registry_config" logout ghcr.io >/dev/null' EXIT
           docker run --rm \
             --mount "type=bind,source=$registry_config,target=/root/.docker,readonly" \
-            docker.io/aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+            "$TRIVY_IMAGE" \
             image --image-src remote --platform "$PLATFORM" \
-            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
-            ghcr.io/xtelag/forman:latest
+            --scanners vuln --severity HIGH,CRITICAL --format json --no-progress \
+            ghcr.io/xtelag/forman:latest > "$report"
+
+          docker run --rm -i "$TRIVY_IMAGE" convert --format table /dev/stdin < "$report"
+
+          unfixed_high="$(jq -e '[.Results[].Vulnerabilities[]?
+            | select(.Severity == "HIGH" and (.FixedVersion // "") == "")] | length' "$report")"
+          unfixed_critical="$(jq -e '[.Results[].Vulnerabilities[]?
+            | select(.Severity == "CRITICAL" and (.FixedVersion // "") == "")] | length' "$report")"
+          blocking="$(jq -e '[.Results[].Vulnerabilities[]?
+            | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")] | length' "$report")"
+
+          if (( unfixed_critical > 0 )); then
+            printf '::warning::%s CRITICAL findings without an available fixed version on %s.\n' "$unfixed_critical" "$PLATFORM"
+          fi
+          if (( unfixed_high > 0 )); then
+            printf '::warning::%s HIGH findings without an available fixed version on %s.\n' "$unfixed_high" "$PLATFORM"
+          fi
+          if (( blocking > 0 )); then
+            printf '::error::%s fixable HIGH or CRITICAL findings on %s.\n' "$blocking" "$PLATFORM"
+            exit 1
+          fi
