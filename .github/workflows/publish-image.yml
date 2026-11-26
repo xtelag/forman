@@ -10,6 +10,17 @@ on:
         description: Existing release tag (for example v0.4.0)
         required: true
         type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      expected-digest:
+        required: true
+        type: string
+      expected-revision:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,6 +30,9 @@ jobs:
   publish:
     if: github.repository == 'xtelag/forman'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: publish-forman-oci
+      cancel-in-progress: false
     env:
       IMAGE: ghcr.io/xtelag/forman
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -46,14 +60,78 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build and publish the OCI image
+        shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.release.outputs.version }}
+          EXPECTED_DIGEST: ${{ inputs.expected-digest }}
+          EXPECTED_REVISION: ${{ inputs.expected-revision }}
+          TRIVY_IMAGE: docker.io/aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
         run: |
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           trap 'docker logout ghcr.io >/dev/null' EXIT
-          docker buildx build --platform linux/amd64,linux/arm64 --pull \
-            --output type=registry,oci-mediatypes=true \
-            --label "org.opencontainers.image.version=$VERSION" \
-            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
-            --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" .
+          revision="$(git rev-parse HEAD)"
+          build_args=(
+            --platform linux/amd64,linux/arm64 --pull
+            --label "org.opencontainers.image.version=$VERSION"
+            --label "org.opencontainers.image.revision=$revision"
+            --output type=registry,oci-mediatypes=true
+            --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest"
+          )
+          if [[ -z "$EXPECTED_DIGEST" ]]; then
+            docker buildx build "${build_args[@]}" .
+            exit 0
+          fi
+
+          image_digest() {
+            docker buildx imagetools inspect "$1" --format '{{ .Manifest.Digest }}'
+          }
+
+          [[ "$EXPECTED_DIGEST" =~ ^sha256:[a-f0-9]{64}$ && "$revision" == "$EXPECTED_REVISION" ]]
+          latest_digest="$(image_digest "$IMAGE:latest")"
+          version_digest="$(image_digest "$IMAGE:$VERSION")"
+          if [[ "$latest_digest" != "$EXPECTED_DIGEST" || "$version_digest" != "$EXPECTED_DIGEST" ]]; then
+            echo "::notice::The scanned image is no longer the current release. Skipping the refresh."
+            exit 0
+          fi
+
+          work="$(mktemp -d)"
+          runtime_image="$(sed -n 's/^ARG RUNTIME_IMAGE=//p' Dockerfile)"
+          runtime_digest="$(image_digest "$runtime_image")"
+          [[ "$runtime_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          runtime_ref="$runtime_image@$runtime_digest"
+          docker buildx imagetools inspect "$runtime_ref" --format '{{json .Image}}' > "$work/base.json"
+          docker buildx imagetools inspect "$IMAGE@$EXPECTED_DIGEST" --format '{{json .Image}}' > "$work/release.json"
+          if jq -en --slurpfile base "$work/base.json" --slurpfile release "$work/release.json" '
+            all("linux/amd64", "linux/arm64"; . as $platform
+              | $base[0][$platform].rootfs.diff_ids as $layers
+              | ($layers | type == "array" and length > 0)
+              and ($release[0][$platform].rootfs.diff_ids[0:($layers | length)] == $layers))
+          ' >/dev/null; then
+            echo "::error::The latest runtime base still matches the published image. No refresh is available."
+            exit 1
+          fi
+
+          docker buildx build "${build_args[@]}" --build-arg "RUNTIME_IMAGE=$runtime_ref" \
+            --metadata-file "$work/build.json" .
+          published_digest="$(jq -er '."containerimage.digest" | select(test("^sha256:[a-f0-9]{64}$"))' "$work/build.json")"
+          mkdir "$work/cache"
+          clean=true
+          for platform in linux/amd64 linux/arm64; do
+            printf '::group::Published refresh %s\n' "$platform"
+            docker run --rm \
+              --mount "type=bind,source=${DOCKER_CONFIG:-$HOME/.docker},target=/root/.docker,readonly" \
+              --mount "type=bind,source=$work/cache,target=/root/.cache/trivy" \
+              "$TRIVY_IMAGE" image --image-src remote --platform "$platform" \
+              --scanners vuln --severity HIGH,CRITICAL --format json --no-progress \
+              "$IMAGE@$published_digest" > "$work/report.json"
+            docker run --rm -i "$TRIVY_IMAGE" convert --format table /dev/stdin < "$work/report.json"
+            printf '::endgroup::\n'
+            blocking="$(jq -e '[.Results[].Vulnerabilities[]?
+              | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")] | length' "$work/report.json")"
+            if (( blocking > 0 )); then
+              printf '::error::The rebuilt image still has %s fixable findings on %s.\n' "$blocking" "$platform"
+              clean=false
+            fi
+          done
+          [[ "$clean" == true ]]

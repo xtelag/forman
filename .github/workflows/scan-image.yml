@@ -12,6 +12,7 @@ permissions:
   packages: read
 
 env:
+  IMAGE: ghcr.io/xtelag/forman
   TRIVY_IMAGE: docker.io/aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
 
 jobs:
@@ -21,44 +22,80 @@ jobs:
       (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [linux/amd64, linux/arm64]
+    outputs:
+      tag: ${{ steps.scan.outputs.tag }}
+      digest: ${{ steps.scan.outputs.digest }}
+      revision: ${{ steps.scan.outputs.revision }}
     steps:
       - name: Scan the published Forman image
+        id: scan
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PLATFORM: ${{ matrix.platform }}
         run: |
           registry_config="$(mktemp -d)"
+          cache="$(mktemp -d)"
           report="$(mktemp)"
           trap 'docker --config "$registry_config" logout ghcr.io >/dev/null; unlink "$report"' EXIT
           printf '%s' "$GHCR_TOKEN" | docker --config "$registry_config" login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          docker run --rm \
-            --mount "type=bind,source=$registry_config,target=/root/.docker,readonly" \
-            "$TRIVY_IMAGE" \
-            image --image-src remote --platform "$PLATFORM" \
-            --scanners vuln --severity HIGH,CRITICAL --format json --no-progress \
-            ghcr.io/xtelag/forman:latest > "$report"
+          digest="$(docker --config "$registry_config" buildx imagetools inspect "$IMAGE:latest" --format '{{ .Manifest.Digest }}')"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
 
-          docker run --rm -i "$TRIVY_IMAGE" convert --format table /dev/stdin < "$report"
+          blocking_total=0
+          fixable_os_total=0
+          for platform in linux/amd64 linux/arm64; do
+            printf '::group::%s\n' "$platform"
+            docker run --rm \
+              --mount "type=bind,source=$registry_config,target=/root/.docker,readonly" \
+              --mount "type=bind,source=$cache,target=/root/.cache/trivy" \
+              "$TRIVY_IMAGE" \
+              image --image-src remote --platform "$platform" \
+              --scanners vuln --severity HIGH,CRITICAL --format json --no-progress \
+              "$IMAGE@$digest" > "$report"
 
-          unfixed_high="$(jq -e '[.Results[].Vulnerabilities[]?
-            | select(.Severity == "HIGH" and (.FixedVersion // "") == "")] | length' "$report")"
-          unfixed_critical="$(jq -e '[.Results[].Vulnerabilities[]?
-            | select(.Severity == "CRITICAL" and (.FixedVersion // "") == "")] | length' "$report")"
-          blocking="$(jq -e '[.Results[].Vulnerabilities[]?
-            | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")] | length' "$report")"
+            docker run --rm -i "$TRIVY_IMAGE" convert --format table /dev/stdin < "$report"
+            printf '::endgroup::\n'
 
-          if (( unfixed_critical > 0 )); then
-            printf '::warning::%s CRITICAL findings without an available fixed version on %s.\n' "$unfixed_critical" "$PLATFORM"
+            for severity in HIGH CRITICAL; do
+              unfixed="$(jq -e --arg severity "$severity" '[.Results[].Vulnerabilities[]?
+                | select(.Severity == $severity and (.FixedVersion // "") == "")] | length' "$report")"
+              if (( unfixed > 0 )); then
+                printf '::warning::%s %s findings without an available fixed version on %s.\n' "$unfixed" "$severity" "$platform"
+              fi
+            done
+
+            blocking="$(jq -e '[.Results[].Vulnerabilities[]?
+              | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")] | length' "$report")"
+            fixable_os="$(jq -e '[.Results[] | select(.Class == "os-pkgs") | .Vulnerabilities[]?
+              | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")] | length' "$report")"
+            blocking_total=$((blocking_total + blocking))
+            fixable_os_total=$((fixable_os_total + fixable_os))
+            if (( blocking > 0 )); then
+              printf '::error::%s fixable HIGH or CRITICAL findings on %s.\n' "$blocking" "$platform"
+            fi
+          done
+
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]] && (( fixable_os_total > 0 )); then
+            release="$(docker --config "$registry_config" buildx imagetools inspect "$IMAGE@$digest" --format '{{json .Image}}' | jq -er '
+              [.["linux/amd64"], .["linux/arm64"] | .config.Labels
+                | [."org.opencontainers.image.version", ."org.opencontainers.image.revision"]]
+              | unique | select(length == 1) | .[0]
+              | select(.[0] | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              | select(.[1] | type == "string" and test("^[a-f0-9]{40}$"))
+              | @tsv')"
+            IFS=$'\t' read -r version revision <<< "$release"
+            printf 'tag=v%s\ndigest=%s\nrevision=%s\n' "$version" "$digest" "$revision" >> "$GITHUB_OUTPUT"
           fi
-          if (( unfixed_high > 0 )); then
-            printf '::warning::%s HIGH findings without an available fixed version on %s.\n' "$unfixed_high" "$PLATFORM"
-          fi
-          if (( blocking > 0 )); then
-            printf '::error::%s fixable HIGH or CRITICAL findings on %s.\n' "$blocking" "$PLATFORM"
-            exit 1
-          fi
+          (( blocking_total == 0 ))
+
+  refresh:
+    needs: scan
+    if: failure() && needs.scan.result == 'failure' && github.event_name == 'schedule' && needs.scan.outputs.tag != ''
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      tag: ${{ needs.scan.outputs.tag }}
+      expected-digest: ${{ needs.scan.outputs.digest }}
+      expected-revision: ${{ needs.scan.outputs.revision }}
