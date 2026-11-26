@@ -1,6 +1,7 @@
 # Forman
 
 [![Publish OCI image](https://github.com/xtelag/forman/actions/workflows/publish-image.yml/badge.svg)](https://github.com/xtelag/forman/actions/workflows/publish-image.yml)
+[![Scan OCI image](https://github.com/xtelag/forman/actions/workflows/scan-image.yml/badge.svg)](https://github.com/xtelag/forman/actions/workflows/scan-image.yml)
 
 The Swiss Army knife for web forms and surveys.
 
