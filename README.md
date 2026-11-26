@@ -1,5 +1,7 @@
 # Forman
 
+[![Publish OCI image](https://github.com/xtelag/forman/actions/workflows/publish-image.yml/badge.svg)](https://github.com/xtelag/forman/actions/workflows/publish-image.yml)
+
 The Swiss Army knife for web forms and surveys.
 
 Forman is a self-hosted application for collecting responses and processing them through Pipelines.
